@@ -1,0 +1,85 @@
+---
+title: "3_TOP_ICD_4CE"
+author: "Amelia"
+date: "12 May 2022"
+output: html_document
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir =paste0("../../Output/3_TOP_ICD_4CE/",Sys.Date())) })
+---
+
+```{r setup, include=FALSE}
+  knitr::opts_chunk$set(echo = TRUE)
+```
+
+Following the guide from: https://rstudio-pubs-static.s3.amazonaws.com/126008_15ccf9c1c14d48e8a0b85be64c383350.html
+```{R}
+  set.seed(42)
+#install.packages("pander")
+  library(pander)
+  library(dplyr)
+  library(tidyr)
+  library(here)
+  library(data.table)
+  library(ggplot2)
+  library(ggsci)
+  library(ggthemes)
+  dir.create(here("Output","3_TOP_ICD_4CE"))
+  dir.create(here("Output","3_TOP_ICD_4CE",Sys.Date()))
+  dir.create(here("Output","3_TOP_ICD_4CE",Sys.Date(),"Outfiles"))
+  PATH_OUT=paste0(here("Output","3_TOP_ICD_4CE",Sys.Date(),"Outfiles"),"/")
+  
+  load(here("Output","1_HPO_ICD_withUMLS","2022-08-12","1_HPO_ICD_withUMLS.Rdata"))
+  load(here("Output","0_Clean_BIDMC","2022-06-27","0_Clean_BIDMC.Rdata")) 
+  load(here("Output","2_QuantifyUsage_4CE","2022-08-15","2_QuantifyUsage_4CE.Rdata"))
+  #load(here("Output","2A_QuantifyUsage_4CE_ByCat","2022-07-07","2A_QuantifyUsage_4CE_ByCat.Rdata")) #DO NOT LOAD THIS IT IS WOULD HAVE THE ICD CAT DATA INSTEAD OF THE COHORTS
+  ls()
+```
+
+### LOAD DATA FROM BIDMC 
+```{R}
+  for(group in names(USAGE_MATCHED)){
+    #group="ADMITTED"
+    print(group)
+    data=USAGE_MATCHED[[group]]
+    
+    match<-data$MATCHABLE
+    nomatch<-data$NOT_MATCHABLE
+    
+    #TOP TERMS WITH HIGHEST USAGE COUNTS
+    #WITH MATCHED HPO
+    match_ordCounts<-match[order(-match$Counts),]
+    USAGE_MATCHED[[group]]$MATCHABLE<-match_ordCounts
+    head(match_ordCounts,20)
+    #WITHOUT MATCHED HPO
+    nomatch_ordCounts<-nomatch[order(-nomatch$Counts),]
+    USAGE_MATCHED[[group]]$NOT_MATCHABLE<-nomatch_ordCounts
+    head(nomatch_ordCounts,20)
+    write.table(match_ordCounts[1:50,],file=paste0(PATH_OUT,group,"Top50UsageCounts_MATCHED.tsv"),col.names =TRUE, quote=FALSE,row.names = FALSE,sep="\t")
+    write.table(nomatch_ordCounts[1:50,],file=paste0(PATH_OUT,group,"Top50UsageCounts_NotMATCHED.tsv"),col.names =TRUE, quote=FALSE,row.names = FALSE,sep="\t")
+
+    
+    #TOP TERMS WITH HIGHEST PATIENT COUNTS
+    #WITH MATCHED HPO
+    match_ordPatCounts<-match[order(-match$PatientCounts),]
+    head(match_ordCounts,20)
+    #WITHOUT MATCHED HPO
+    nomatch_ordPatCounts<-nomatch[order(-nomatch$PatientCounts),]
+    head(nomatch_ordPatCounts,20)
+    write.table(match_ordPatCounts[1:50,],file=paste0(PATH_OUT,group,"_Top50PatientCounts_MATCHED.tsv"),col.names =TRUE, quote=FALSE,row.names = FALSE,sep="\t")
+    write.table(nomatch_ordPatCounts[1:50,],file=paste0(PATH_OUT,group,"_Top50PatientCounts_NotMATCHED.tsv"),col.names =TRUE, quote=FALSE,row.names = FALSE,sep="\t")
+    
+  }
+  USAGE_MATCHED_ORDERED<-USAGE_MATCHED
+```
+
+```{R}
+  save(
+    USAGE_MATCHED_ORDERED,
+    
+    file=paste0(here("Output","3_TOP_ICD_4CE",Sys.Date()),"/3_TOP_ICD_4CE.Rdata")
+  )
+```
+
+```{R}
+  sessionInfo()
+```

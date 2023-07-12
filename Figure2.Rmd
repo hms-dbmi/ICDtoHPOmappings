@@ -1,0 +1,109 @@
+---
+title: "2C_ICDRollup_ProportionPlots_TwoGroups_SumPatCounts"
+author: "Amelia"
+date: "7 July 2022"
+output: html_document
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir =paste0("../../Output/2C_ICDRollup_ProportionPlots_TwoGroups_SumPatCounts/",Sys.Date())) })
+---
+
+```{r setup, include=FALSE}
+  knitr::opts_chunk$set(echo = TRUE)
+```
+
+Following the guide from: https://rstudio-pubs-static.s3.amazonaws.com/126008_15ccf9c1c14d48e8a0b85be64c383350.html
+```{R}
+  set.seed(42)
+#install.packages("pander")
+  library(pander)
+  library(dplyr)
+  library(tidyr)
+  library(here)
+  library(data.table)
+  library(ggplot2)
+  library(ggsci)
+  library(ggthemes)
+  library(stringr)
+
+  dir.create(here("Output","2C_ICDRollup_ProportionPlots_TwoGroups_SumPatCounts"))
+  dir.create(here("Output","2C_ICDRollup_ProportionPlots_TwoGroups_SumPatCounts",Sys.Date()))
+  dir.create(here("Output","2C_ICDRollup_ProportionPlots_TwoGroups_SumPatCounts",Sys.Date(),"Outfiles"))
+  PATH_OUT=paste0(here("Output","2C_ICDRollup_ProportionPlots_TwoGroups_SumPatCounts",Sys.Date(),"Outfiles"),"/")
+  
+  load(here("Output","1_HPO_ICD_withUMLS","2022-08-12","1_HPO_ICD_withUMLS.Rdata"))
+  load(here("Output","0_Clean_BIDMC","2022-06-27","0_Clean_BIDMC.Rdata")) 
+  load(here("Output","2A_QuantifyUsage_4CE_ByCat","2022-08-15","2A_QuantifyUsage_4CE_ByCat.Rdata"))
+  
+  ICDGROUPS<-fread("/Users/ameliatan/Dropbox (HMS)/OntologyMapping/Data/ICD_Categories/icd10Codes_edited.txt",header = FALSE)
+  ls()
+```
+
+### EXPORT AND PLOT THE SUMMARY PROPORTIONS FOR <100 AND >100 PATIENTCOUNTS
+```{R}
+  head(SUM_PROPORTION_DF)
+  ROLLUP_TWOGRP_TOPLOT<-list()
+  
+  for (f in unique(SUM_PROPORTION_DF$cohort)){
+    dat=SUM_PROPORTION_DF[which(SUM_PROPORTION_DF$cohort==f),]
+    toplot0<-melt(dat)
+    toplot0$group<-str_split_fixed(toplot0$variable, "_", 3)[,2]
+    toplot0$status<-str_split_fixed(toplot0$variable, "_", 3)[,1]
+    toplot0$axeslabs<-paste0(toplot0$ontologyGroupLabel," (",toplot0$ontologyGroupCat,")")
+    toplot0<-toplot0[which(!toplot0$status %in% c("Matched","NotMatched","Others","NumCodes")),]
+
+    Num<-toplot0[which(toplot0$status=="SumPatProp"),]
+    dim(Num)
+    toplot<-toplot0[which(!toplot0$status=="SumPatProp"),]
+    
+    toplot$status<-factor(toplot$status,levels = c("SumPatMatchedProp","SumPatNotMatchedProp","SumPatOthersProp"))
+    
+    #order it by the matched frequency
+    ord<-toplot[which(toplot$status=="SumPatMatchedProp" & toplot$group=="lessthanequal100"),]
+    ord<-ord[order(-ord$value),]
+    toplot$axeslabs<-factor(toplot$axeslabs,levels = ord$axeslabs)
+    
+    toplot$tomatch=paste0(toplot$ontologyGroupCat,toplot$group)
+    Num$tomatch=paste0(Num$ontologyGroupCat,Num$group)
+    toplot$Freq=Num$value[match(toplot$tomatch,Num$tomatch)]
+    toplot$Freq[which(toplot$status %in% c("NotMatched","Others"))]<-""
+    
+    plotout<-toplot %>%
+      ggplot(aes(x=value,y=axeslabs,fill=status, bw = "nrd0")) +
+      geom_col(position = "fill")+
+      geom_text(aes(label = Freq,x=1.09),size =3)+
+      scale_fill_viridis_d(direction = -1)+
+      scale_color_viridis_d(direction = -1)+
+      theme_bw() + 
+      theme(plot.title = element_text(face = "bold", size = 12),
+        legend.title = element_blank(), 
+        legend.text  = element_text(size = 7.5),
+        axis.ticks = element_line(colour = "grey70", size = 0.2),
+        panel.grid.major = element_line(colour = "grey70", size = 0.2),
+        panel.grid.minor = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust=1))+
+      scale_x_continuous(limits = c(0, 1.12))+
+      scale_y_discrete(labels = function(x) stringr::str_wrap(x, width = 45))+
+      labs(y= "ICD Groups", x = paste0("Proportion in ",f," Patients"))+
+      facet_wrap(~group)
+
+      #scale_fill_manual(values=c("#E69f00","#0072B2","#808080")) #color blind
+      #scale_fill_manual(values=c( "#404080","#69b3a2","#808080"))
+    ggsave(plotout,filename=paste0(PATH_OUT,f,"_ICDCat_ProportionPlots_TwoGroups.pdf"), width = 11, height = 6.5)
+    
+    ROLLUP_TWOGRP_TOPLOT[[f]]<-toplot
+  }
+  names(ROLLUP_TWOGRP_TOPLOT)<-unique(SUM_PROPORTION_DF$cohort)
+```
+
+
+```{R}
+  save(
+    ROLLUP_TWOGRP_TOPLOT, #DF used for plots
+    
+    file=paste0(here("Output","2C_ICDRollup_ProportionPlots_TwoGroups_SumPatCounts",Sys.Date()),"/2C_ICDRollup_ProportionPlots_TwoGroups_SumPatCounts.Rdata")
+  )
+```
+
+```{R}
+  sessionInfo()
+```

@@ -1,0 +1,146 @@
+---
+title: "7C_Prop_ByUsageGroup_NotAdm"
+author: "Amelia"
+date: "27 June 2022"
+output: html_document
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir =paste0("../../Output/7C_Prop_ByUsageGroup_NotAdm/",Sys.Date())) })
+---
+
+```{r setup, include=FALSE}
+  knitr::opts_chunk$set(echo = TRUE)
+```
+
+Following the guide from: https://rstudio-pubs-static.s3.amazonaws.com/126008_15ccf9c1c14d48e8a0b85be64c383350.html
+```{R}
+  set.seed(42)
+#install.packages("pander")
+  library(pander)
+  library(dplyr)
+  library(tidyr)
+  library(here)
+  library(data.table)
+  library(ggplot2)
+  library(ggsci)
+  library(ggthemes)
+  dir.create(here("Output","7C_Prop_ByUsageGroup_NotAdm"))
+  dir.create(here("Output","7C_Prop_ByUsageGroup_NotAdm",Sys.Date()))
+  dir.create(here("Output","7C_Prop_ByUsageGroup_NotAdm",Sys.Date(),"Outfiles"))
+  PATH_OUT=paste0(here("Output","7C_Prop_ByUsageGroup_NotAdm",Sys.Date(),"Outfiles"),"/")
+  
+  #PATH_IN=paste0(here("Data","BIDMC","percentiles_42122"),"/")
+  PATH_IN_SETS=paste0(here("Output","1_HPO_ICD_withUMLS","2022-08-12"),"/")
+  
+  load(here("Output","1_HPO_ICD_withUMLS","2022-08-12","1_HPO_ICD_withUMLS.Rdata"))
+  load(here("Output","0_Clean_BIDMC","2022-06-27","0_Clean_BIDMC.Rdata"))
+  #load(here("Output","2_QuantifyUsage_4CE","2022-05-07","2_QuantifyUsage_4CE.Rdata")) #same as 3_TOP_ICD_4CE::2022-04-12 but additionally saved the OTHERS DF in the list as well
+```
+
+### PLOTING FOR THE 
+```{R}
+#READ IN THE LIST COMPONENTS THAT ARE FOR NOTADMITTED PATIENTS
+  lapply(BIDMC_USAGEDATA[7:9],head)
+  lapply(BIDMC_USAGEDATA[1:3],names)
+  
+  NOTADMITTED_USAGE<-BIDMC_USAGEDATA[1:3]
+  names(NOTADMITTED_USAGE)<-c("infrequent","common","rare")
+  
+  MAPPEDGROUPS<-function(codes){
+    #OF THOSE CODES THAT ARE IN THE COHORT WHICH OF THEM ARE MAPPED TO HPO VIA THE UMLS DICTIONARY
+    MATCHABLE0<- codes[codes %in% icd10cm_match$ontologyID.x]
+    toadd<-icd10cm_match[match(MATCHABLE0,icd10cm_match$ontologyID.x),]
+    MATCHABLE<-cbind(MATCHABLE0,toadd)
+    dim(MATCHABLE)
+    #take it out of the df for matching the rest to the unmatached df because the ontology id is not unique
+    codes2<-codes[!codes %in% icd10cm_match$ontologyID.x]
+
+    #OF THOSE CODES THAT ARE IN THE COHORT WHICH OF THEM ARE NOT MAPPED TO HPO VIA THE UMLS DICTIONARY
+    NOT_MATCHABLE0<- codes2[codes2 %in% icd10cm_NOTmatch$ontologyID]
+    toadd<-icd10cm_NOTmatch[match(NOT_MATCHABLE0,icd10cm_NOTmatch$ontologyID),]
+    NOT_MATCHABLE<-cbind(NOT_MATCHABLE0,toadd)
+    dim(NOT_MATCHABLE)
+    
+    #take it out of the df to get all the remaining codes that dont match to ICD at all
+    codes3<-codes2[!codes2 %in% icd10cm_NOTmatch$ontologyID]
+    dim(codes3)
+    
+    #DFS FOR COUNTING THE PROPORTION MATCHED 
+    ALL<-data.frame(codes=codes,groups=rep("ALL",length(codes)))
+    MATCHABLE0<-data.frame(codes=MATCHABLE0,groups=rep("MATCHABLE",length(MATCHABLE0)))
+    NOT_MATCHABLE0<-data.frame(codes=NOT_MATCHABLE0,groups=rep("NOT_MATCHABLE",length(NOT_MATCHABLE0)))
+    OTHERS<-data.frame(codes=codes3,groups=rep("OTHERS",length(codes3)))
+
+    matched_prop<-nrow(MATCHABLE0)/nrow(ALL)
+    unmatched_prop<-nrow(NOT_MATCHABLE0)/nrow(ALL)
+    others_prop<-nrow(OTHERS)/nrow(ALL)
+    TOPLOT_PROP<-c(matched=matched_prop,unmatched=unmatched_prop,others=others_prop)
+    
+    #DF FOR SAVING TO THE OUTPUT LIST
+    #SAVED THEDFS WITH THE ANNOTATION IS THERE IS
+    out<-list(ALL,#JUST ALL THE CODES FOR THAT GROUP
+              MATCHABLE, #THOSE THAT MATCHED WITH A HPO CODE, WITH UMLS TABLE MATCHED
+              NOT_MATCHABLE,#THOSE THAT DID NOT MATCH WITH A HPO CODE, THESE CODES ARE FOUND IN icd10cm_NOTmatch
+              OTHERS, #CODES THAT ARE NOT IN UMLS TABLE AT ALL
+              TOPLOT_PROP) #THE PROPORTION TO BE USED FOR PLOTTING
+    names(out)<-c("ALL","MATCHABLE","NOT_MATCHABLE","OTHERS","TOPLOT_PROP")
+    return(out)
+  }
+  
+  
+  common_out<-MAPPEDGROUPS(NOTADMITTED_USAGE[["common"]]$ontologyID)
+  common_out$TOPLOT_PROP
+
+  infrequent_out<-MAPPEDGROUPS(NOTADMITTED_USAGE[["infrequent"]]$ontologyID)
+  infrequent_out$TOPLOT_PROP
+  
+  rare_out<-MAPPEDGROUPS(NOTADMITTED_USAGE[["rare"]]$ontologyID)
+  rare_out$TOPLOT_PROP
+  
+  common_prop<-data.frame(UsageGroup=rep("common(>1%)",length(common_out$TOPLOT_PROP)),
+                          status=names(common_out$TOPLOT_PROP),
+                          proportion=common_out$TOPLOT_PROP)
+  infrequent_prop<-data.frame(UsageGroup=rep("infrequent(0.1-1%)",length(infrequent_out$TOPLOT_PROP)),
+                          status=names(infrequent_out$TOPLOT_PROP),
+                          proportion=infrequent_out$TOPLOT_PROP)
+  rare_prop<-data.frame(UsageGroup=rep("rare(<0.1%)",length(rare_out$TOPLOT_PROP)),
+                          status=names(rare_out$TOPLOT_PROP),
+                          proportion=rare_out$TOPLOT_PROP)
+  combined_toplot<-rbind(common_prop,infrequent_prop,rare_prop)
+  combined_toplot$status<-factor(combined_toplot$status,levels = c("matched","unmatched","others"))
+  
+  plotout<-combined_toplot %>%
+      ggplot(aes(x=UsageGroup,y=proportion,fill=status,bw = "nrd0")) +
+      geom_col(position = "fill")+
+      scale_fill_viridis_d(direction = -1)+
+      scale_color_viridis_d(direction = -1)+
+      theme_bw() + 
+      theme(plot.title = element_text(face = "bold", size = 12),
+        legend.title = element_blank(), 
+        legend.text  = element_text(size = 7.5),
+        axis.ticks = element_line(colour = "grey70", size = 0.2),
+        panel.grid.major = element_line(colour = "grey70", size = 0.2),
+        panel.grid.minor = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust=1))
+      #scale_fill_manual(values=c("#E69f00","#0072B2","#808080")) #color blind
+      #scale_fill_manual(values=c( "#404080","#69b3a2","#808080"))
+    ggsave(plotout,filename=paste0(PATH_OUT,"ProportionPlots_CommonInfrequetRare.pdf"), width = 4, height = 5)
+
+```
+
+
+```{R}
+  save(
+    #THESE LISTS CONTAIN THE DFS FOR THE DIFFERENT CODES IN EACH CATEGORY AND THE PORPORTION FOR PLOTTING
+    common_out,
+    infrequent_out,
+    rare_out,
+    
+    combined_toplot,
+    
+    file=paste0(here("Output","7C_Prop_ByUsageGroup_NotAdm",Sys.Date()),"/7C_Prop_ByUsageGroup_NotAdm.Rdata")
+  )
+```
+
+```{R}
+  sessionInfo()
+```
